@@ -121,6 +121,9 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 
+void            updateticks();
+void            getpinfo(strcut pstat* pst);
+
 // swtch.S
 void            swtch(struct context**, struct context*);
 

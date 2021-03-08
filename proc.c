@@ -6,6 +6,8 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "pstat.h"
+#include "randomk.h"
 
 struct {
   struct spinlock lock;
@@ -88,6 +90,8 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->tickets = 1;
+  p->ticks = 0;
 
   release(&ptable.lock);
 
@@ -199,6 +203,7 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
+  np->tickets = curproc->tickets;
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -295,6 +300,8 @@ wait(void)
         p->name[0] = 0;
         p->killed = 0;
         p->state = UNUSED;
+        p->tickets = 1;
+        p->ticks = 0;
         release(&ptable.lock);
         return pid;
       }
@@ -332,6 +339,7 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+    /*
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
@@ -349,7 +357,26 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
+    }*/
+    {
+      struct proc* p = choseprocbytickets();
+      if (p) {
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+
+      swtch(&(c->scheduler), p->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;  
+      }
     }
+
     release(&ptable.lock);
 
   }
@@ -494,6 +521,92 @@ kill(int pid)
   }
   release(&ptable.lock);
   return -1;
+}
+
+void
+updateticks()
+{
+  struct proc *p;
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if (p->state == RUNNING) {
+      p->ticks++;
+    }
+  }
+  release(&ptable.lock);
+}
+
+void
+getpinfo(struct pstat *pst)
+{
+  acquire(&ptable.lock);
+  for (int i = 0; i < NPROC; ++i) {
+    struct proc *p = &ptable.proc[i];
+    pst->inuse[i] = p->state != UNUSED ? 1 : 0;
+    pst->pid[i] = p->pid;
+    pst->tickets[i] = p->tickets;
+    pst->ticks[i] = p->ticks;
+  }
+  release(&ptable.lock);
+}
+
+int
+calctotaltickets()
+{
+  int totaltickets = 0;
+  for (int i = 0; i < NPROC; ++i) {
+    struct proc* p = &ptable.proc[i];
+    if (p->state == RUNNABLE) {
+      totaltickets += p->tickets;
+    }
+  }
+
+  return totaltickets;
+}
+
+int
+calcprocrank(struct prankstat* prst)
+{
+  int totaltickets = 0;
+  int usest = 0;
+  for (int i = 0; i < NPROC; ++i) {
+    struct proc* p = &ptable.proc[i];
+    if (p->state == RUNNABLE) {
+      prst->rank[usest].pindex = i;
+      prst->rank[usest].rank = totaltickets + p->tickets;
+      usest += 1;
+      totaltickets += p->tickets;
+    }
+  }
+  prst->totaltickets = totaltickets;
+  prst->useproc = usest;
+
+  return totaltickets;
+}
+
+struct proc* 
+choseprocbytickets()
+{
+  struct proc* p = 0;
+  struct prankstat prst;
+  int total = calcprocrank(&prst);
+
+  if (prst.useproc == 0)
+    return p;
+
+  int randval = rand() % total;
+  int choseni = -1;
+  for (int i = 0; prst.useproc; ++i) {
+    if (randval < prst.rank[i].rank) {
+      choseni = prst.rank[i].pindex;
+      break;
+    }
+  }
+  if (choseni >= 0 && choseni < prst.useproc) {
+    p = &ptable.proc[choseni];
+  }
+
+  return p;
 }
 
 //PAGEBREAK: 36

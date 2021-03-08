@@ -49,6 +49,19 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int tickets;                 // The number of tickets
+  int ticks;
+};
+
+// Processes rank 
+struct prank {
+  int pindex;   // Index in ptable
+  int rank;     // The process rank if in RUNNABLE state
+};
+struct prankstat {
+  struct prank rank[NPROC]; // All processes
+  int useproc;              // The number of RUNNABLE processes
+  int totaltickets;         // The total tickets of RUNNABLE processes
 };
 
 // Process memory is laid out contiguously, low addresses first:
