@@ -18,3 +18,4 @@ mkfs
 .DS_Store
 *.pyc
 _*
+/.vscode/
