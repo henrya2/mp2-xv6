@@ -22,6 +22,8 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+struct proc* choseprocbytickets();
+
 void
 pinit(void)
 {
@@ -357,9 +359,10 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
-    }*/
+    }
+    */
     {
-      struct proc* p = choseprocbytickets();
+      p = choseprocbytickets();
       if (p) {
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
@@ -584,25 +587,24 @@ calcprocrank(struct prankstat* prst)
   return totaltickets;
 }
 
-struct proc* 
-choseprocbytickets()
+struct proc* choseprocbytickets()
 {
   struct proc* p = 0;
   struct prankstat prst;
   int total = calcprocrank(&prst);
 
-  if (prst.useproc == 0)
+  if (prst.useproc <= 0)
     return p;
 
   int randval = rand() % total;
   int choseni = -1;
-  for (int i = 0; prst.useproc; ++i) {
+  for (int i = 0; i < prst.useproc; ++i) {
     if (randval < prst.rank[i].rank) {
       choseni = prst.rank[i].pindex;
       break;
     }
   }
-  if (choseni >= 0 && choseni < prst.useproc) {
+  if (choseni >= 0) {
     p = &ptable.proc[choseni];
   }
 
@@ -644,4 +646,25 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+#include "randomk.h"
+
+#define RANDOM_MOD 0x7FFFFFFFu
+#define RANDOM_MUL 1103515245
+#define RANDOM_INC 12345
+
+static int seed = 67867823;
+
+void srand(int val)
+{
+    seed = val;
+}
+
+int rand()
+{
+    int oldSeed = seed;
+    seed = ((unsigned)(RANDOM_MUL * seed + RANDOM_INC)) % RANDOM_MOD;
+
+    return oldSeed;
 }

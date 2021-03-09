@@ -10,6 +10,8 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+struct pstat;
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -122,7 +124,7 @@ void            wakeup(void*);
 void            yield(void);
 
 void            updateticks();
-void            getpinfo(strcut pstat* pst);
+void            getpinfo(struct pstat* pst);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
